@@ -1,4 +1,6 @@
+use std::collections::hash_map::RandomState;
 use std::collections::HashSet;
+use std::iter::FromIterator;
 use std::net::IpAddr;
 use std::str::FromStr;
 
@@ -95,6 +97,10 @@ pub fn compute_records(resources: Vec<&WatchedResource>) -> Vec<Record> {
     records
 }
 
+pub fn dedupe_records(records: Vec<Record>) -> Vec<Record> {
+    Vec::from_iter(HashSet::<Record, RandomState>::from_iter(records))
+}
+
 pub fn plan(expected: &[Record], actual: &[Record]) -> Vec<PlanAction> {
     fn find<'a>(records: &'a [Record], record: &Record) -> Option<&'a Record> {
         records.into_iter()
@@ -121,7 +127,12 @@ pub fn plan(expected: &[Record], actual: &[Record]) -> Vec<PlanAction> {
             }
 
             if record.content != existing.content {
-                plan.push(PlanAction::Update(record.clone()));
+                plan.push(PlanAction::Update(
+                    Record {
+                        id: existing.id.clone(),
+                        ..record.clone()
+                    }
+                ));
             }
         } else {
             if not_managed.contains(&record.name) {

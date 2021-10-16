@@ -15,7 +15,7 @@ use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 use kube_cloudflare_dns::api::CfApi;
-use kube_cloudflare_dns::plan::{compute_records, plan};
+use kube_cloudflare_dns::plan::{compute_records, dedupe_records, plan};
 use kube_cloudflare_dns::resource::{ResourceKey, WatchedResource};
 
 async fn watcher<T>(client: kube::Client, watched_resources: Arc<Mutex<HashMap<ResourceKey, WatchedResource>>>,
@@ -78,7 +78,7 @@ async fn main() {
     rx.recv().await;
 
     loop {
-        let expected: Vec<_> = {
+        let expected = {
             let resources = resources.lock().await;
             println!("Resources: {:?}", resources.keys());
             compute_records(resources.values().collect())
@@ -86,6 +86,7 @@ async fn main() {
                 .filter(|r| r.name.ends_with(&zone_name))
                 .collect()
         };
+        let expected = dedupe_records(expected);
         println!("Expected: {:?}", expected);
 
         if let Err(err) = async {
@@ -102,10 +103,12 @@ async fn main() {
             for change in plan {
                 use kube_cloudflare_dns::plan::PlanAction::*;
 
-                match change {
-                    Add(record) => cf_client.create_record(&zone.id, &record).await?,
-                    Delete(record) => cf_client.delete_record(&zone.id, &record.id).await?,
-                    Update(record) => cf_client.update_record(&zone.id, &record).await?
+                if let Err(err) = match change {
+                    Add(record) => cf_client.create_record(&zone.id, &record).await,
+                    Delete(record) => cf_client.delete_record(&zone.id, &record.id).await,
+                    Update(record) => cf_client.update_record(&zone.id, &record).await
+                } {
+                    println!("{}", err);
                 }
             }
 

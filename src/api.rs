@@ -1,7 +1,8 @@
-use serde::{Serialize, Deserialize};
 use std::convert::TryInto;
+
 use reqwest::Client;
 use reqwest::header::{AUTHORIZATION, HeaderMap};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -17,7 +18,7 @@ pub struct Zone {
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Record {
     pub id: String,
     #[serde(rename = "type")]
