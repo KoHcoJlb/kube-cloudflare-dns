@@ -4,7 +4,7 @@ use std::iter::FromIterator;
 use std::net::IpAddr;
 use std::str::FromStr;
 
-use k8s_openapi::api::core::v1::{LoadBalancerStatus, Service, ServiceSpec};
+use k8s_openapi::api::core::v1::{LoadBalancerStatus, Service, ServiceSpec, ServiceStatus};
 use k8s_openapi::api::networking::v1::{Ingress, IngressSpec, IngressStatus};
 
 use crate::{APP_NAME, HOSTNAME_LABEL};
@@ -34,12 +34,32 @@ fn ingress_addresses(ingress: &Ingress) -> Vec<String> {
 }
 
 fn service_addresses(service: &Service) -> Vec<String> {
-    if let Some(ServiceSpec {
-                    cluster_ips: Some(addresses), ..
-                }) = &service.spec {
-        addresses.clone()
-    } else {
-        Vec::new()
+    match service {
+        Service {
+            spec: Some(ServiceSpec {
+                           type_: Some(service_type),
+                           ..
+                       }),
+            status: Some(
+                ServiceStatus {
+                    load_balancer: Some(
+                        LoadBalancerStatus {
+                            ingress: Some(ingress), ..
+                        }), ..
+                }), ..
+        } if service_type == "LoadBalancer" => {
+            ingress.into_iter()
+                .filter_map(|ingress| ingress.ip.as_ref())
+                .cloned()
+                .collect()
+        }
+        Service {
+            spec: Some(
+                ServiceSpec {
+                    cluster_ips: Some(ips), ..
+                }), ..
+        } => ips.clone(),
+        _ => vec![]
     }
 }
 
